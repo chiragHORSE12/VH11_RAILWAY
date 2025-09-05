@@ -104,7 +104,7 @@ def data_generation_page():
             st.metric("Cancellation Rate", f"{(data['recommended_action'] == 'Cancel').mean()*100:.1f}%")
         
         # Data preview
-        st.dataframe(data.head(10), use_container_width=True)
+        st.dataframe(data.head(10), width='stretch')
         
         # Visualizations
         col1, col2 = st.columns(2)
@@ -114,14 +114,14 @@ def data_generation_page():
             fig = px.histogram(data, x='actual_delay', nbins=30, 
                              title="Distribution of Train Delays")
             fig.update_layout(xaxis_title="Delay (minutes)", yaxis_title="Frequency")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             # Action distribution
             action_counts = data['recommended_action'].value_counts()
             fig = px.pie(values=action_counts.values, names=action_counts.index,
                         title="Recommended Actions Distribution")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
 def model_training_page():
     st.header("🤖 Model Training")
@@ -225,7 +225,7 @@ def model_training_page():
                 xaxis_title="Actual Delay (minutes)",
                 yaxis_title="Predicted Delay (minutes)"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             
             # Metrics table
             metrics_df = pd.DataFrame({
@@ -256,7 +256,7 @@ def model_training_page():
                 xaxis_title="Predicted Action",
                 yaxis_title="Actual Action"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             
             # Classification report
             st.text("Classification Report:")
@@ -356,7 +356,7 @@ def optimization_page():
             st.metric(
                 "Cancellations",
                 results['optimized_metrics']['cancellations'],
-                delta=results['optimized_metrics']['cancellations'] - results['original_metrics']['cancellations']
+                delta=int(results['optimized_metrics']['cancellations'] - results['original_metrics']['cancellations'])
             )
         
         with col4:
@@ -395,7 +395,7 @@ def optimization_page():
             fig.update_xaxes(title_text="Delay (minutes)")
             fig.update_yaxes(title_text="Frequency")
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             # Action distribution comparison
@@ -434,7 +434,7 @@ def optimization_page():
                 barmode='group'
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
 def evaluation_page():
     st.header("📊 Evaluation & Results")
@@ -561,7 +561,7 @@ def evaluation_page():
             hovermode='x unified'
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with tab2:
         st.subheader("Model Analysis")
@@ -580,7 +580,7 @@ def evaluation_page():
                 title="Feature Importance for Delay Prediction"
             )
             fig.update_layout(xaxis_title="Importance", yaxis_title="Features")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             st.write("**Action Classification Feature Importance**")
@@ -593,14 +593,14 @@ def evaluation_page():
                 title="Feature Importance for Action Classification"
             )
             fig.update_layout(xaxis_title="Importance", yaxis_title="Features")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # Model comparison
         st.subheader("Model Comparison")
         
         comparison_data = eval_results['model_comparison']
         comparison_df = pd.DataFrame(comparison_data)
-        st.dataframe(comparison_df, use_container_width=True)
+        st.dataframe(comparison_df, width='stretch')
     
     with tab3:
         st.subheader("Optimization Impact Analysis")
@@ -643,7 +643,7 @@ def evaluation_page():
             ]
         })
         
-        st.dataframe(comparison_metrics, use_container_width=True)
+        st.dataframe(comparison_metrics, width='stretch')
         
         # ROI Analysis
         st.subheader("Return on Investment Analysis")
@@ -651,14 +651,14 @@ def evaluation_page():
         col1, col2 = st.columns(2)
         
         with col1:
-            st.metric("Annual Cost Savings", f"${eval_results['annual_savings']:,.0f}")
-            st.metric("Implementation Cost", f"${eval_results['implementation_cost']:,.0f}")
-            st.metric("Payback Period", f"{eval_results['payback_period']:.1f} months")
+            st.metric("Annual Cost Savings", f"${eval_results['financial_impact']['annual_savings']:,.0f}")
+            st.metric("Implementation Cost", f"${eval_results['financial_impact']['implementation_cost']:,.0f}")
+            st.metric("Payback Period", f"{eval_results['financial_impact']['payback_period']:.1f} months")
         
         with col2:
-            st.metric("5-Year NPV", f"${eval_results['five_year_npv']:,.0f}")
-            st.metric("ROI", f"{eval_results['roi']:.1f}%")
-            st.metric("Break-even Point", f"{eval_results['break_even_months']:.1f} months")
+            st.metric("5-Year NPV", f"${eval_results['financial_impact']['five_year_npv']:,.0f}")
+            st.metric("ROI", f"{eval_results['financial_impact']['roi']:.1f}%")
+            st.metric("Break-even Point", f"{eval_results['financial_impact']['break_even_months']:.1f} months")
     
     with tab4:
         st.subheader("Executive Summary Report")
@@ -671,7 +671,7 @@ def evaluation_page():
         - **Delay Reduction**: {((results['original_metrics']['avg_delay'] - results['optimized_metrics']['avg_delay'])/results['original_metrics']['avg_delay']*100):.1f}% average delay reduction
         - **On-Time Performance**: Improved from {results['original_metrics']['on_time_rate']*100:.1f}% to {results['optimized_metrics']['on_time_rate']*100:.1f}%
         - **Passenger Satisfaction**: {eval_results['passenger_satisfaction']:.1%} satisfaction rate
-        - **Cost Savings**: ${eval_results['annual_savings']:,.0f} estimated annual savings
+        - **Cost Savings**: ${eval_results['financial_impact']['annual_savings']:,.0f} estimated annual savings
         
         ### 📊 **Model Performance**
         
@@ -693,9 +693,9 @@ def evaluation_page():
         
         ### 💰 **Financial Impact**
         
-        - **Annual Savings**: ${eval_results['annual_savings']:,.0f}
-        - **ROI**: {eval_results['roi']:.1f}% return on investment
-        - **Payback Period**: {eval_results['payback_period']:.1f} months
+        - **Annual Savings**: ${eval_results['financial_impact']['annual_savings']:,.0f}
+        - **ROI**: {eval_results['financial_impact']['roi']:.1f}% return on investment
+        - **Payback Period**: {eval_results['financial_impact']['payback_period']:.1f} months
         
         ### 📈 **Recommendations**
         
