@@ -6,11 +6,13 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pickle
 import os
+import time
 
 from data_generator import TrainDataGenerator
 from models import DelayPredictor, ActionClassifier
 from optimizer import TrainScheduleOptimizer
 from evaluator import SystemEvaluator
+from integrations import integration_manager
 
 def main():
     st.set_page_config(
@@ -26,7 +28,7 @@ def main():
     st.sidebar.title("Navigation")
     page = st.sidebar.selectbox(
         "Choose a section:",
-        ["Data Generation", "Model Training", "Schedule Optimization", "Evaluation & Results"]
+        ["Control Center", "Data Generation", "Model Training", "Schedule Optimization", "What-If Simulation", "Evaluation & Results", "Performance Dashboard"]
     )
     
     # Initialize session state
@@ -36,15 +38,25 @@ def main():
         st.session_state.models_trained = False
     if 'optimization_done' not in st.session_state:
         st.session_state.optimization_done = False
+    if 'realtime_data' not in st.session_state:
+        st.session_state.realtime_data = None
+    if 'recommendations' not in st.session_state:
+        st.session_state.recommendations = []
     
-    if page == "Data Generation":
+    if page == "Control Center":
+        control_center_page()
+    elif page == "Data Generation":
         data_generation_page()
     elif page == "Model Training":
         model_training_page()
     elif page == "Schedule Optimization":
         optimization_page()
+    elif page == "What-If Simulation":
+        whatif_simulation_page()
     elif page == "Evaluation & Results":
         evaluation_page()
+    elif page == "Performance Dashboard":
+        performance_dashboard_page()
 
 def data_generation_page():
     st.header("📊 Data Generation")
@@ -717,6 +729,707 @@ def evaluation_page():
         # Download report button
         if st.button("📥 Download Full Report"):
             st.info("Report download functionality would be implemented here in a production system.")
+
+def control_center_page():
+    """Real-time decision support interface for section controllers."""
+    st.header("🚦 Control Center - Real-Time Decision Support")
+    st.markdown("**Intelligent decision support for section controllers with real-time train precedence and crossing optimization**")
+    
+    if not st.session_state.models_trained:
+        st.warning("⚠️ Please train models first in the Model Training section.")
+        return
+    
+    # Real-time status section
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("🚂 Real-Time Train Status")
+        
+        # Generate current operational data
+        if st.button("🔄 Refresh Real-Time Data", type="primary"):
+            from data_generator import TrainDataGenerator
+            generator = TrainDataGenerator()
+            current_data = generator.generate_real_time_data(30)
+            
+            # Add simulated real-time fields
+            current_data['current_location'] = [f"Section {i%10+1}" for i in range(len(current_data))]
+            current_data['next_signal'] = [f"Signal {i%20+1}" for i in range(len(current_data))]
+            current_data['conflict_detected'] = np.random.choice([True, False], len(current_data), p=[0.2, 0.8])
+            current_data['priority_level'] = np.random.choice(['High', 'Medium', 'Low'], len(current_data), p=[0.3, 0.5, 0.2])
+            
+            st.session_state.realtime_data = current_data
+        
+        # Display current trains
+        if 'realtime_data' in st.session_state:
+            data = st.session_state.realtime_data
+            
+            # Status metrics
+            col_a, col_b, col_c, col_d = st.columns(4)
+            with col_a:
+                st.metric("Active Trains", len(data))
+            with col_b:
+                conflicts = data['conflict_detected'].sum()
+                st.metric("Conflicts Detected", conflicts, delta=f"{conflicts} requiring attention")
+            with col_c:
+                high_priority = (data['priority_level'] == 'High').sum()
+                st.metric("High Priority", high_priority)
+            with col_d:
+                avg_load = data['passenger_load_percentage'].mean()
+                st.metric("Avg Load", f"{avg_load:.0f}%")
+            
+            # Train status table
+            display_data = data[['train_id', 'train_type', 'current_location', 'next_signal', 
+                               'passenger_load_percentage', 'conflict_detected', 'priority_level']].copy()
+            display_data.columns = ['Train ID', 'Type', 'Location', 'Next Signal', 'Load %', 'Conflict', 'Priority']
+            
+            # Color code conflicts
+            st.dataframe(
+                display_data,
+                width='stretch',
+                use_container_width=False
+            )
+    
+    with col2:
+        st.subheader("⚡ Smart Recommendations")
+        
+        if 'realtime_data' in st.session_state:
+            data = st.session_state.realtime_data
+            
+            # Generate AI recommendations
+            if st.button("🤖 Generate Recommendations"):
+                from optimizer import TrainScheduleOptimizer
+                optimizer = TrainScheduleOptimizer(
+                    st.session_state.delay_predictor,
+                    st.session_state.action_classifier,
+                    strategy='weighted_greedy'
+                )
+                
+                # Generate recommendations for conflicted trains
+                conflict_trains = data[data['conflict_detected']]
+                
+                recommendations = []
+                for _, train in conflict_trains.iterrows():
+                    rec = generate_controller_recommendation(train, data)
+                    recommendations.append(rec)
+                
+                st.session_state.recommendations = recommendations
+            
+            # Display recommendations
+            if 'recommendations' in st.session_state:
+                for i, rec in enumerate(st.session_state.recommendations):
+                    with st.expander(f"🚨 {rec['train_id']} - {rec['action']}", expanded=True):
+                        st.write(f"**Situation:** {rec['situation']}")
+                        st.write(f"**Recommendation:** {rec['recommendation']}")
+                        st.write(f"**Expected Impact:** {rec['impact']}")
+                        
+                        col_x, col_y = st.columns(2)
+                        with col_x:
+                            if st.button(f"✅ Accept", key=f"accept_{i}"):
+                                st.success(f"Recommendation accepted for {rec['train_id']}")
+                        with col_y:
+                            if st.button(f"❌ Override", key=f"override_{i}"):
+                                st.info(f"Manual override recorded for {rec['train_id']}")
+    
+    # Section controller tools
+    st.subheader("🎛️ Section Controller Tools")
+    
+    tab1, tab2, tab3 = st.tabs(["Manual Controls", "Crossing Management", "Emergency Protocols"])
+    
+    with tab1:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("**Signal Control**")
+            selected_signal = st.selectbox("Select Signal", [f"Signal {i}" for i in range(1, 21)])
+            signal_action = st.radio("Signal Action", ["Clear", "Caution", "Stop"])
+            if st.button("Apply Signal Command"):
+                st.success(f"Signal {selected_signal} set to {signal_action}")
+        
+        with col2:
+            st.write("**Platform Management**")
+            selected_platform = st.selectbox("Select Platform", [f"Platform {i}" for i in range(1, 11)])
+            platform_action = st.radio("Platform Action", ["Available", "Occupied", "Maintenance"])
+            if st.button("Update Platform Status"):
+                st.success(f"Platform {selected_platform} status: {platform_action}")
+    
+    with tab2:
+        st.write("**Crossing Conflict Resolution**")
+        if 'realtime_data' in st.session_state:
+            conflicts = st.session_state.realtime_data[st.session_state.realtime_data['conflict_detected']]
+            if len(conflicts) > 0:
+                for _, conflict in conflicts.head(3).iterrows():
+                    st.write(f"🚨 **Conflict:** Train {conflict['train_id']} at {conflict['current_location']}")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if st.button(f"Hold {conflict['train_id']}", key=f"hold_{conflict['train_id']}"):
+                            st.info(f"Train {conflict['train_id']} held")
+                    with col2:
+                        if st.button(f"Reroute {conflict['train_id']}", key=f"reroute_{conflict['train_id']}"):
+                            st.info(f"Rerouting {conflict['train_id']}")
+                    with col3:
+                        if st.button(f"Priority Pass {conflict['train_id']}", key=f"priority_{conflict['train_id']}"):
+                            st.info(f"Priority given to {conflict['train_id']}")
+            else:
+                st.success("✅ No crossing conflicts detected")
+    
+    with tab3:
+        st.write("**Emergency Response Protocols**")
+        emergency_type = st.selectbox("Emergency Type", 
+                                    ["Signal Failure", "Track Obstruction", "Medical Emergency", "Weather Alert"])
+        affected_section = st.selectbox("Affected Section", [f"Section {i}" for i in range(1, 11)])
+        
+        if st.button("🚨 Activate Emergency Protocol", type="primary"):
+            st.error(f"Emergency protocol activated for {emergency_type} in {affected_section}")
+            st.info("All trains in affected section will be automatically held and alternative routes calculated.")
+
+def whatif_simulation_page():
+    """What-if simulation and scenario analysis interface."""
+    st.header("🎯 What-If Simulation & Scenario Analysis")
+    st.markdown("**Evaluate alternative strategies and analyze potential outcomes before implementation**")
+    
+    if not st.session_state.models_trained:
+        st.warning("⚠️ Please train models first in the Model Training section.")
+        return
+    
+    # Scenario setup
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("📊 Scenario Configuration")
+        
+        scenario_type = st.selectbox(
+            "Scenario Type",
+            ["Normal Operations", "Weather Disruption", "Signal Failure", "Track Maintenance", "Peak Hour Rush", "Emergency Situation"]
+        )
+        
+        # Scenario-specific parameters
+        if scenario_type == "Weather Disruption":
+            weather_severity = st.slider("Weather Severity Impact", 1.0, 3.0, 1.5, 0.1)
+            affected_routes = st.multiselect("Affected Routes", [f"Route {i}" for i in range(1, 11)], ["Route 1", "Route 3"])
+        
+        elif scenario_type == "Signal Failure":
+            failed_signals = st.multiselect("Failed Signals", [f"Signal {i}" for i in range(1, 21)], ["Signal 5"])
+            failure_duration = st.slider("Estimated Repair Time (hours)", 0.5, 8.0, 2.0, 0.5)
+        
+        elif scenario_type == "Track Maintenance":
+            maintenance_sections = st.multiselect("Maintenance Sections", [f"Section {i}" for i in range(1, 11)], ["Section 4"])
+            maintenance_duration = st.slider("Maintenance Duration (hours)", 1, 12, 4)
+        
+        simulation_duration = st.slider("Simulation Duration (hours)", 1, 24, 8)
+        num_trains = st.slider("Number of Trains", 50, 500, 200, 25)
+        
+    with col2:
+        st.subheader("⚙️ Alternative Strategies")
+        
+        # Strategy options
+        holding_strategy = st.selectbox(
+            "Holding Strategy",
+            ["Minimal Holding", "Strategic Holding", "Dynamic Holding"]
+        )
+        
+        rerouting_enabled = st.checkbox("Enable Automatic Rerouting", True)
+        if rerouting_enabled:
+            rerouting_aggressiveness = st.slider("Rerouting Aggressiveness", 0.1, 1.0, 0.6, 0.1)
+        
+        priority_override = st.checkbox("Allow Priority Override", False)
+        if priority_override:
+            priority_trains = st.multiselect("Priority Trains", [f"Train {i}" for i in range(1, 21)])
+        
+        capacity_management = st.selectbox(
+            "Capacity Management",
+            ["Standard", "Load Balancing", "Express Priority"]
+        )
+    
+    # Run simulation
+    if st.button("🚀 Run Simulation", type="primary"):
+        with st.spinner("Running scenario simulation..."):
+            # Generate simulation data
+            from data_generator import TrainDataGenerator
+            generator = TrainDataGenerator()
+            sim_data = generator.generate_dataset(num_trains)
+            
+            # Apply scenario modifications
+            sim_data = apply_scenario_modifications(sim_data, scenario_type, locals())
+            
+            # Run optimization with different strategies
+            from optimizer import TrainScheduleOptimizer
+            
+            # Baseline optimization
+            optimizer_baseline = TrainScheduleOptimizer(
+                st.session_state.delay_predictor,
+                st.session_state.action_classifier,
+                strategy='greedy'
+            )
+            baseline_results = optimizer_baseline.optimize_schedule(sim_data)
+            
+            # Alternative strategy optimization
+            optimizer_alternative = TrainScheduleOptimizer(
+                st.session_state.delay_predictor,
+                st.session_state.action_classifier,
+                strategy='weighted_greedy'
+            )
+            optimizer_alternative.set_weights(
+                passenger_delay=0.4 if holding_strategy == "Strategic Holding" else 0.6,
+                cancellations=0.4,
+                congestion=0.2
+            )
+            alternative_results = optimizer_alternative.optimize_schedule(sim_data)
+            
+            # Store results
+            st.session_state.simulation_results = {
+                'scenario_type': scenario_type,
+                'baseline': baseline_results,
+                'alternative': alternative_results,
+                'parameters': {
+                    'holding_strategy': holding_strategy,
+                    'rerouting_enabled': rerouting_enabled,
+                    'capacity_management': capacity_management
+                }
+            }
+            
+            st.success("✅ Simulation completed!")
+    
+    # Display simulation results
+    if 'simulation_results' in st.session_state:
+        st.subheader("📈 Simulation Results")
+        
+        results = st.session_state.simulation_results
+        baseline = results['baseline']
+        alternative = results['alternative']
+        
+        # Comparison metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            baseline_delay = baseline['original_metrics']['avg_delay']
+            alternative_delay = alternative['optimized_metrics']['avg_delay']
+            improvement = ((baseline_delay - alternative_delay) / baseline_delay * 100) if baseline_delay > 0 else 0
+            st.metric(
+                "Delay Improvement",
+                f"{improvement:.1f}%",
+                delta=f"-{baseline_delay - alternative_delay:.1f} min"
+            )
+        
+        with col2:
+            baseline_ontime = baseline['original_metrics']['on_time_rate']
+            alternative_ontime = alternative['optimized_metrics']['on_time_rate']
+            ontime_improvement = (alternative_ontime - baseline_ontime) * 100
+            st.metric(
+                "On-Time Rate",
+                f"{alternative_ontime*100:.1f}%",
+                delta=f"+{ontime_improvement:.1f}%"
+            )
+        
+        with col3:
+            baseline_cancellations = baseline['original_metrics']['cancellations']
+            alternative_cancellations = alternative['optimized_metrics']['cancellations']
+            st.metric(
+                "Cancellations",
+                alternative_cancellations,
+                delta=alternative_cancellations - baseline_cancellations
+            )
+        
+        with col4:
+            baseline_congestion = baseline['original_metrics']['congestion_score']
+            alternative_congestion = alternative['optimized_metrics']['congestion_score']
+            st.metric(
+                "Congestion Score",
+                f"{alternative_congestion:.2f}",
+                delta=f"{alternative_congestion - baseline_congestion:.2f}"
+            )
+        
+        # Strategy comparison
+        st.subheader("📊 Strategy Comparison")
+        
+        comparison_df = pd.DataFrame({
+            'Metric': ['Average Delay (min)', 'On-Time Rate (%)', 'Cancellations', 'Congestion Score', 'Throughput'],
+            'Baseline Strategy': [
+                f"{baseline['original_metrics']['avg_delay']:.1f}",
+                f"{baseline['original_metrics']['on_time_rate']*100:.1f}",
+                baseline['original_metrics']['cancellations'],
+                f"{baseline['original_metrics']['congestion_score']:.2f}",
+                baseline['original_metrics']['total_trains']
+            ],
+            'Alternative Strategy': [
+                f"{alternative['optimized_metrics']['avg_delay']:.1f}",
+                f"{alternative['optimized_metrics']['on_time_rate']*100:.1f}",
+                alternative['optimized_metrics']['cancellations'],
+                f"{alternative['optimized_metrics']['congestion_score']:.2f}",
+                alternative['optimized_metrics']['total_trains']
+            ],
+            'Improvement': [
+                f"{improvement:.1f}%",
+                f"+{ontime_improvement:.1f}%",
+                f"{alternative_cancellations - baseline_cancellations:+d}",
+                f"{alternative_congestion - baseline_congestion:+.2f}",
+                "0"
+            ]
+        })
+        
+        st.dataframe(comparison_df, width='stretch')
+        
+        # Recommendations
+        st.subheader("💡 Simulation Insights")
+        
+        if improvement > 10:
+            st.success(f"✅ Alternative strategy shows significant improvement ({improvement:.1f}% delay reduction)")
+            st.info("**Recommendation:** Implement the alternative strategy for this scenario type.")
+        elif improvement > 5:
+            st.info(f"⚠️ Alternative strategy shows moderate improvement ({improvement:.1f}% delay reduction)")
+            st.info("**Recommendation:** Consider implementing with close monitoring.")
+        else:
+            st.warning(f"❗ Alternative strategy shows minimal improvement ({improvement:.1f}% delay reduction)")
+            st.info("**Recommendation:** Stick with baseline strategy or explore other alternatives.")
+
+def performance_dashboard_page():
+    """Performance monitoring dashboard with KPIs and audit trails."""
+    st.header("📊 Performance Dashboard")
+    st.markdown("**Real-time KPIs, audit trails, and continuous improvement metrics**")
+    
+    # KPI Overview
+    st.subheader("🎯 Key Performance Indicators")
+    
+    # Generate sample KPI data
+    if 'kpi_data' not in st.session_state:
+        st.session_state.kpi_data = generate_sample_kpi_data()
+    
+    kpi_data = st.session_state.kpi_data
+    
+    # Current KPIs
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.metric(
+            "System Availability",
+            f"{kpi_data['availability']:.1f}%",
+            delta=f"+{np.random.uniform(0.1, 0.5):.1f}%"
+        )
+    
+    with col2:
+        st.metric(
+            "Average Punctuality",
+            f"{kpi_data['punctuality']:.1f}%",
+            delta=f"+{np.random.uniform(1, 3):.1f}%"
+        )
+    
+    with col3:
+        st.metric(
+            "Throughput (trains/hour)",
+            f"{kpi_data['throughput']:.0f}",
+            delta=f"+{np.random.randint(2, 8)}"
+        )
+    
+    with col4:
+        st.metric(
+            "Network Utilization",
+            f"{kpi_data['utilization']:.1f}%",
+            delta=f"+{np.random.uniform(0.5, 2.0):.1f}%"
+        )
+    
+    with col5:
+        st.metric(
+            "Customer Satisfaction",
+            f"{kpi_data['satisfaction']:.1f}",
+            delta=f"+{np.random.uniform(0.1, 0.3):.1f}"
+        )
+    
+    # Performance trends
+    tab1, tab2, tab3, tab4 = st.tabs(["Trends", "Audit Trail", "System Health", "Reports"])
+    
+    with tab1:
+        st.subheader("📈 Performance Trends")
+        
+        # Generate trend data
+        dates = pd.date_range(start='2025-08-01', end='2025-09-05', freq='D')
+        trend_data = pd.DataFrame({
+            'Date': dates,
+            'Punctuality': np.random.normal(85, 5, len(dates)).clip(70, 100),
+            'Throughput': np.random.normal(45, 8, len(dates)).clip(20, 70),
+            'Delays': np.random.normal(12, 4, len(dates)).clip(5, 25),
+            'Satisfaction': np.random.normal(4.2, 0.3, len(dates)).clip(3.0, 5.0)
+        })
+        
+        # Punctuality trend
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=trend_data['Date'],
+            y=trend_data['Punctuality'],
+            mode='lines+markers',
+            name='Punctuality (%)',
+            line=dict(color='green')
+        ))
+        fig.update_layout(
+            title="Punctuality Trend (Last 30 Days)",
+            xaxis_title="Date",
+            yaxis_title="Punctuality (%)",
+            hovermode='x unified'
+        )
+        st.plotly_chart(fig, width='stretch')
+        
+        # Multi-metric dashboard
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=trend_data['Date'],
+                y=trend_data['Throughput'],
+                mode='lines+markers',
+                name='Throughput',
+                line=dict(color='blue')
+            ))
+            fig.update_layout(
+                title="Daily Throughput",
+                xaxis_title="Date",
+                yaxis_title="Trains/Hour"
+            )
+            st.plotly_chart(fig, width='stretch')
+        
+        with col2:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=trend_data['Date'],
+                y=trend_data['Delays'],
+                mode='lines+markers',
+                name='Average Delay',
+                line=dict(color='red')
+            ))
+            fig.update_layout(
+                title="Average Daily Delays",
+                xaxis_title="Date",
+                yaxis_title="Minutes"
+            )
+            st.plotly_chart(fig, width='stretch')
+    
+    with tab2:
+        st.subheader("📋 Audit Trail")
+        
+        # Generate sample audit data
+        audit_data = generate_sample_audit_data()
+        
+        # Filters
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            action_filter = st.selectbox("Filter by Action", ["All"] + audit_data['Action'].unique().tolist())
+        with col2:
+            user_filter = st.selectbox("Filter by User", ["All"] + audit_data['User'].unique().tolist())
+        with col3:
+            date_filter = st.date_input("From Date", value=pd.Timestamp.now().date() - pd.Timedelta(days=7))
+        
+        # Apply filters
+        filtered_data = audit_data.copy()
+        if action_filter != "All":
+            filtered_data = filtered_data[filtered_data['Action'] == action_filter]
+        if user_filter != "All":
+            filtered_data = filtered_data[filtered_data['User'] == user_filter]
+        
+        st.dataframe(filtered_data, width='stretch')
+        
+        # Audit statistics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Actions Today", len(filtered_data[filtered_data['Timestamp'].dt.date == pd.Timestamp.now().date()]))
+        with col2:
+            st.metric("Manual Overrides", len(filtered_data[filtered_data['Action'] == 'Manual Override']))
+        with col3:
+            st.metric("System Actions", len(filtered_data[filtered_data['User'] == 'System']))
+    
+    with tab3:
+        st.subheader("🔧 System Health Monitoring")
+        
+        # System components status
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**System Components Status**")
+            components = [
+                {"name": "AI Models", "status": "Operational", "uptime": "99.8%"},
+                {"name": "Data Pipeline", "status": "Operational", "uptime": "99.9%"},
+                {"name": "Optimization Engine", "status": "Operational", "uptime": "99.7%"},
+                {"name": "API Gateway", "status": "Operational", "uptime": "99.6%"},
+                {"name": "Database", "status": "Operational", "uptime": "99.9%"}
+            ]
+            
+            for comp in components:
+                col_a, col_b, col_c = st.columns([2, 1, 1])
+                with col_a:
+                    st.write(comp["name"])
+                with col_b:
+                    st.success(comp["status"])
+                with col_c:
+                    st.write(comp["uptime"])
+        
+        with col2:
+            st.write("**Performance Metrics**")
+            
+            # Response time chart
+            response_times = np.random.normal(250, 50, 24)
+            hours = list(range(24))
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=hours,
+                y=response_times,
+                mode='lines+markers',
+                name='Response Time (ms)',
+                line=dict(color='purple')
+            ))
+            fig.update_layout(
+                title="24-Hour Response Time",
+                xaxis_title="Hour",
+                yaxis_title="Response Time (ms)"
+            )
+            st.plotly_chart(fig, width='stretch')
+    
+    with tab4:
+        st.subheader("📄 Performance Reports")
+        
+        report_type = st.selectbox(
+            "Report Type",
+            ["Daily Summary", "Weekly Analysis", "Monthly Report", "Incident Analysis", "ROI Report"]
+        )
+        
+        report_period = st.date_input("Report Period", value=pd.Timestamp.now().date())
+        
+        if st.button("📊 Generate Report"):
+            with st.spinner("Generating report..."):
+                time.sleep(2)  # Simulate report generation
+                
+                if report_type == "Daily Summary":
+                    st.markdown(f"""
+                    ## Daily Performance Summary - {report_period}
+                    
+                    ### 🎯 Key Metrics
+                    - **Trains Processed:** 1,247
+                    - **Average Delay:** 8.3 minutes (↓ 15% from yesterday)
+                    - **On-Time Performance:** 87.2% (↑ 3.1% from yesterday)
+                    - **Cancellations:** 12 (↓ 4 from yesterday)
+                    - **System Uptime:** 99.8%
+                    
+                    ### 📈 Performance Highlights
+                    - Peak hour efficiency improved by 12%
+                    - Weather impact mitigation reduced delays by 23%
+                    - 3 manual interventions prevented potential conflicts
+                    
+                    ### ⚠️ Issues & Resolutions
+                    - Signal malfunction at Junction 5 (resolved in 45 minutes)
+                    - Track maintenance caused 8-minute average delay on Line 3
+                    - Emergency protocol activated once for medical incident
+                    """)
+                
+                elif report_type == "Weekly Analysis":
+                    st.markdown(f"""
+                    ## Weekly Performance Analysis - Week ending {report_period}
+                    
+                    ### 📊 Weekly Trends
+                    - **Total Trains:** 8,731 (↑ 2.3% from last week)
+                    - **Average Weekly Delay:** 9.1 minutes (↓ 8% from last week)
+                    - **Weekly On-Time Rate:** 85.7% (↑ 2.8% from last week)
+                    - **Customer Satisfaction:** 4.3/5.0 (↑ 0.2 from last week)
+                    
+                    ### 🎯 Achievement Summary
+                    - Exceeded punctuality target for 5 out of 7 days
+                    - Implemented 23 AI-recommended optimizations
+                    - Zero safety incidents reported
+                    - Passenger complaints reduced by 18%
+                    
+                    ### 🔍 Areas for Improvement
+                    - Morning peak hour delays still 12% above target
+                    - Weekend service reliability needs attention
+                    - Integration with external weather services required
+                    """)
+                
+                st.success("✅ Report generated successfully!")
+                
+                # Export options
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("📥 Export as PDF"):
+                        st.info("PDF export functionality would be implemented here")
+                with col2:
+                    if st.button("📧 Email Report"):
+                        st.info("Email functionality would be implemented here")
+
+def generate_controller_recommendation(train, all_data):
+    """Generate AI-powered recommendation for section controller."""
+    situations = {
+        'High': 'Critical delay detected with high passenger load',
+        'Medium': 'Moderate delay with potential for escalation',
+        'Low': 'Minor delay requiring attention'
+    }
+    
+    recommendations = {
+        'High': 'Immediate priority routing with alternative path calculation',
+        'Medium': 'Strategic holding at next signal for optimal slot',
+        'Low': 'Continue with current path, monitor closely'
+    }
+    
+    impacts = {
+        'High': 'Reduce delay by 15-25 minutes, improve passenger satisfaction',
+        'Medium': 'Reduce delay by 8-15 minutes, maintain schedule integrity',
+        'Low': 'Prevent delay escalation, maintain current performance'
+    }
+    
+    priority = train['priority_level']
+    
+    return {
+        'train_id': train['train_id'],
+        'action': f"{priority} Priority Action",
+        'situation': situations[priority],
+        'recommendation': recommendations[priority],
+        'impact': impacts[priority]
+    }
+
+def apply_scenario_modifications(data, scenario_type, params):
+    """Apply scenario-specific modifications to simulation data."""
+    modified_data = data.copy()
+    
+    if scenario_type == "Weather Disruption":
+        weather_impact = params.get('weather_severity', 1.5)
+        modified_data['actual_delay'] *= weather_impact
+        modified_data['weather_severity'] = 'Severe'
+    
+    elif scenario_type == "Signal Failure":
+        # Increase delays for affected areas
+        modified_data['actual_delay'] += np.random.uniform(10, 30, len(modified_data))
+    
+    elif scenario_type == "Peak Hour Rush":
+        # Increase passenger load and delays
+        modified_data['passenger_load_percentage'] *= 1.3
+        modified_data['passenger_load_percentage'] = modified_data['passenger_load_percentage'].clip(0, 100)
+        modified_data['actual_delay'] *= 1.2
+    
+    return modified_data
+
+def generate_sample_kpi_data():
+    """Generate sample KPI data for dashboard."""
+    return {
+        'availability': np.random.uniform(98, 100),
+        'punctuality': np.random.uniform(80, 95),
+        'throughput': np.random.uniform(40, 60),
+        'utilization': np.random.uniform(75, 90),
+        'satisfaction': np.random.uniform(3.8, 4.8)
+    }
+
+def generate_sample_audit_data():
+    """Generate sample audit trail data."""
+    actions = ['Manual Override', 'Schedule Optimization', 'Signal Change', 'Platform Assignment', 'Emergency Protocol']
+    users = ['Controller_A', 'Controller_B', 'System', 'Supervisor_1', 'Maintenance']
+    
+    data = []
+    for i in range(50):
+        timestamp = pd.Timestamp.now() - pd.Timedelta(days=np.random.randint(0, 30), 
+                                                    hours=np.random.randint(0, 24))
+        data.append({
+            'Timestamp': timestamp,
+            'Action': np.random.choice(actions),
+            'User': np.random.choice(users),
+            'Target': f'Train_{np.random.randint(1, 200)}',
+            'Result': np.random.choice(['Success', 'Success', 'Success', 'Failed']),
+            'Details': f'Action performed with parameter set {np.random.randint(1, 10)}'
+        })
+    
+    return pd.DataFrame(data).sort_values('Timestamp', ascending=False)
 
 if __name__ == "__main__":
     main()

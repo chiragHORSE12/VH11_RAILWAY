@@ -1,6 +1,6 @@
 # Overview
 
-This is an AI-Based Train Rescheduling System that uses machine learning to predict train delays and optimize schedule decisions. The system generates synthetic train operational data, trains predictive models for delays and scheduling actions, and provides optimization algorithms to minimize passenger impact and operational costs. It features a Streamlit web interface for interactive use and comprehensive evaluation metrics including ROI analysis.
+This is an intelligent decision-support system for train section controllers that combines AI, operations research, and real-time optimization to assist in making optimized decisions for train precedence, crossings, and schedule management. The system leverages machine learning for delay prediction, constraint-based optimization for conflict-free scheduling, and provides real-time decision support with what-if simulation capabilities. It features integration frameworks for external railway systems, comprehensive audit trails, and performance dashboards for continuous improvement.
 
 # User Preferences
 
