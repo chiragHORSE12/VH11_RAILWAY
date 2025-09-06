@@ -116,7 +116,7 @@ def data_generation_page():
             st.metric("Cancellation Rate", f"{(data['recommended_action'] == 'Cancel').mean()*100:.1f}%")
         
         # Data preview
-        st.dataframe(data.head(10), width='stretch')
+        st.dataframe(data.head(10), use_container_width=True)
         
         # Visualizations
         col1, col2 = st.columns(2)
@@ -126,14 +126,14 @@ def data_generation_page():
             fig = px.histogram(data, x='actual_delay', nbins=30, 
                              title="Distribution of Train Delays")
             fig.update_layout(xaxis_title="Delay (minutes)", yaxis_title="Frequency")
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             # Action distribution
             action_counts = data['recommended_action'].value_counts()
             fig = px.pie(values=action_counts.values, names=action_counts.index,
                         title="Recommended Actions Distribution")
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
 
 def model_training_page():
     st.header("🤖 Model Training")
@@ -237,7 +237,7 @@ def model_training_page():
                 xaxis_title="Actual Delay (minutes)",
                 yaxis_title="Predicted Delay (minutes)"
             )
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
             
             # Metrics table
             metrics_df = pd.DataFrame({
@@ -268,7 +268,7 @@ def model_training_page():
                 xaxis_title="Predicted Action",
                 yaxis_title="Actual Action"
             )
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
             
             # Classification report
             st.text("Classification Report:")
@@ -407,7 +407,7 @@ def optimization_page():
             fig.update_xaxes(title_text="Delay (minutes)")
             fig.update_yaxes(title_text="Frequency")
             
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             # Action distribution comparison
@@ -446,7 +446,7 @@ def optimization_page():
                 barmode='group'
             )
             
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
 
 def evaluation_page():
     st.header("📊 Evaluation & Results")
@@ -573,7 +573,7 @@ def evaluation_page():
             hovermode='x unified'
         )
         
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
         st.subheader("Model Analysis")
@@ -592,7 +592,7 @@ def evaluation_page():
                 title="Feature Importance for Delay Prediction"
             )
             fig.update_layout(xaxis_title="Importance", yaxis_title="Features")
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             st.write("**Action Classification Feature Importance**")
@@ -605,14 +605,14 @@ def evaluation_page():
                 title="Feature Importance for Action Classification"
             )
             fig.update_layout(xaxis_title="Importance", yaxis_title="Features")
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
         
         # Model comparison
         st.subheader("Model Comparison")
         
         comparison_data = eval_results['model_comparison']
         comparison_df = pd.DataFrame(comparison_data)
-        st.dataframe(comparison_df, width='stretch')
+        st.dataframe(comparison_df, use_container_width=True)
     
     with tab3:
         st.subheader("Optimization Impact Analysis")
@@ -655,7 +655,7 @@ def evaluation_page():
             ]
         })
         
-        st.dataframe(comparison_metrics, width='stretch')
+        st.dataframe(comparison_metrics, use_container_width=True)
         
         # ROI Analysis
         st.subheader("Return on Investment Analysis")
@@ -768,10 +768,10 @@ def control_center_page():
             with col_a:
                 st.metric("Active Trains", len(data))
             with col_b:
-                conflicts = data['conflict_detected'].sum()
+                conflicts = int(data['conflict_detected'].sum())
                 st.metric("Conflicts Detected", conflicts, delta=f"{conflicts} requiring attention")
             with col_c:
-                high_priority = (data['priority_level'] == 'High').sum()
+                high_priority = int((data['priority_level'] == 'High').sum())
                 st.metric("High Priority", high_priority)
             with col_d:
                 avg_load = data['passenger_load_percentage'].mean()
@@ -785,8 +785,7 @@ def control_center_page():
             # Color code conflicts
             st.dataframe(
                 display_data,
-                width='stretch',
-                use_container_width=False
+                use_container_width=True
             )
     
     with col2:
@@ -808,9 +807,12 @@ def control_center_page():
                 conflict_trains = data[data['conflict_detected']]
                 
                 recommendations = []
-                for _, train in conflict_trains.iterrows():
-                    rec = generate_controller_recommendation(train, data)
-                    recommendations.append(rec)
+                if len(conflict_trains) > 0:
+                    for _, train in conflict_trains.iterrows():
+                        rec = generate_controller_recommendation(train, data)
+                        recommendations.append(rec)
+                else:
+                    recommendations = []
                 
                 st.session_state.recommendations = recommendations
             
@@ -1025,8 +1027,8 @@ def whatif_simulation_page():
             alternative_cancellations = alternative['optimized_metrics']['cancellations']
             st.metric(
                 "Cancellations",
-                alternative_cancellations,
-                delta=alternative_cancellations - baseline_cancellations
+                int(alternative_cancellations),
+                delta=int(alternative_cancellations - baseline_cancellations)
             )
         
         with col4:
@@ -1066,7 +1068,7 @@ def whatif_simulation_page():
             ]
         })
         
-        st.dataframe(comparison_df, width='stretch')
+        st.dataframe(comparison_df, use_container_width=True)
         
         # Recommendations
         st.subheader("💡 Simulation Insights")
@@ -1164,7 +1166,7 @@ def performance_dashboard_page():
             yaxis_title="Punctuality (%)",
             hovermode='x unified'
         )
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
         
         # Multi-metric dashboard
         col1, col2 = st.columns(2)
@@ -1183,7 +1185,7 @@ def performance_dashboard_page():
                 xaxis_title="Date",
                 yaxis_title="Trains/Hour"
             )
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             fig = go.Figure()
@@ -1199,7 +1201,7 @@ def performance_dashboard_page():
                 xaxis_title="Date",
                 yaxis_title="Minutes"
             )
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
         st.subheader("📋 Audit Trail")
@@ -1214,7 +1216,7 @@ def performance_dashboard_page():
         with col2:
             user_filter = st.selectbox("Filter by User", ["All"] + audit_data['User'].unique().tolist())
         with col3:
-            date_filter = st.date_input("From Date", value=pd.Timestamp.now().date() - pd.Timedelta(days=7))
+            date_filter = st.date_input("From Date", value=(pd.Timestamp.now() - pd.Timedelta(days=7)).date())
         
         # Apply filters
         filtered_data = audit_data.copy()
@@ -1223,12 +1225,12 @@ def performance_dashboard_page():
         if user_filter != "All":
             filtered_data = filtered_data[filtered_data['User'] == user_filter]
         
-        st.dataframe(filtered_data, width='stretch')
+        st.dataframe(filtered_data, use_container_width=True)
         
         # Audit statistics
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Actions Today", len(filtered_data[filtered_data['Timestamp'].dt.date == pd.Timestamp.now().date()]))
+            st.metric("Total Actions Today", len(filtered_data[pd.to_datetime(filtered_data['Timestamp']).dt.date == pd.Timestamp.now().date()]))
         with col2:
             st.metric("Manual Overrides", len(filtered_data[filtered_data['Action'] == 'Manual Override']))
         with col3:
@@ -1279,7 +1281,7 @@ def performance_dashboard_page():
                 xaxis_title="Hour",
                 yaxis_title="Response Time (ms)"
             )
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
     
     with tab4:
         st.subheader("📄 Performance Reports")
