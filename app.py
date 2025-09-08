@@ -116,14 +116,14 @@ def display_data_preview(data):
         fig = px.histogram(data, x='actual_delay', nbins=30, 
                          title="Distribution of Train Delays")
         fig.update_layout(xaxis_title="Delay (minutes)", yaxis_title="Frequency")
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, width='stretch', key="delay_histogram")
     
     with col2:
         # Action distribution
         action_counts = data['recommended_action'].value_counts()
         fig = px.pie(values=action_counts.values, names=action_counts.index,
                     title="Recommended Actions Distribution")
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, width='stretch', key="action_pie_chart")
 
 def main():
     st.set_page_config(
@@ -1378,7 +1378,7 @@ def performance_dashboard_page():
         with col2:
             user_filter = st.selectbox("Filter by User", ["All"] + audit_data['User'].unique().tolist())
         with col3:
-            date_filter = st.date_input("From Date", value=(pd.Timestamp.now() - pd.Timedelta(days=7)).date())
+            date_filter = st.date_input("From Date", value=pd.Timestamp.now().date() - pd.Timedelta(days=7))
         
         # Apply filters
         filtered_data = audit_data.copy()
@@ -1392,7 +1392,8 @@ def performance_dashboard_page():
         # Audit statistics
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Actions Today", len(filtered_data[pd.to_datetime(filtered_data['Timestamp']).dt.date == pd.Timestamp.now().date()]))
+            filtered_today = filtered_data[pd.to_datetime(filtered_data['Timestamp']).dt.date == pd.Timestamp.now().date()]
+            st.metric("Total Actions Today", len(filtered_today))
         with col2:
             st.metric("Manual Overrides", len(filtered_data[filtered_data['Action'] == 'Manual Override']))
         with col3:
