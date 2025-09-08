@@ -1396,7 +1396,8 @@ def performance_dashboard_page():
         with col1:
             from datetime import date
             today = date.today()
-            filtered_today = filtered_data[pd.to_datetime(filtered_data['Timestamp']).dt.date == today]
+            timestamps = pd.to_datetime(filtered_data['Timestamp'])
+            filtered_today = filtered_data[timestamps.dt.date == today]
             st.metric("Total Actions Today", len(filtered_today))
         with col2:
             st.metric("Manual Overrides", len(filtered_data[filtered_data['Action'] == 'Manual Override']))
