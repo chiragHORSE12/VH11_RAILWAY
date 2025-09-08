@@ -14,6 +14,117 @@ from optimizer import TrainScheduleOptimizer
 from evaluator import SystemEvaluator
 from integrations import integration_manager
 
+def validate_uploaded_data(data):
+    """
+    Validate uploaded CSV data to ensure it has required columns and correct data types.
+    
+    Args:
+        data (pd.DataFrame): Uploaded data
+        
+    Returns:
+        dict: Validation result with 'valid' flag and 'errors' list
+    """
+    required_columns = [
+        'train_id', 'train_type', 'day_of_week', 'is_holiday', 'upstream_delay',
+        'passenger_load_percentage', 'weather_severity', 'platform_available',
+        'crew_available', 'scheduled_headway', 'origin_station', 'destination_station',
+        'hour', 'is_peak_hour', 'actual_delay', 'recommended_action'
+    ]
+    
+    errors = []
+    
+    # Check if all required columns are present
+    missing_columns = [col for col in required_columns if col not in data.columns]
+    if missing_columns:
+        errors.append(f"Missing required columns: {', '.join(missing_columns)}")
+    
+    # Check data types and values
+    if 'train_type' in data.columns:
+        valid_train_types = ['Express', 'Local']
+        invalid_train_types = data[~data['train_type'].isin(valid_train_types)]['train_type'].unique()
+        if len(invalid_train_types) > 0:
+            errors.append(f"Invalid train_type values: {', '.join(invalid_train_types)}. Must be Express or Local")
+    
+    if 'weather_severity' in data.columns:
+        valid_weather = ['Clear', 'Light', 'Moderate', 'Severe']
+        invalid_weather = data[~data['weather_severity'].isin(valid_weather)]['weather_severity'].unique()
+        if len(invalid_weather) > 0:
+            errors.append(f"Invalid weather_severity values: {', '.join(invalid_weather)}. Must be Clear/Light/Moderate/Severe")
+    
+    if 'recommended_action' in data.columns:
+        valid_actions = ['NoChange', 'Delay', 'ShortTurn', 'Cancel']
+        invalid_actions = data[~data['recommended_action'].isin(valid_actions)]['recommended_action'].unique()
+        if len(invalid_actions) > 0:
+            errors.append(f"Invalid recommended_action values: {', '.join(invalid_actions)}. Must be NoChange/Delay/ShortTurn/Cancel")
+    
+    # Check numeric columns
+    numeric_columns = ['upstream_delay', 'passenger_load_percentage', 'scheduled_headway', 'hour', 'actual_delay']
+    for col in numeric_columns:
+        if col in data.columns:
+            try:
+                pd.to_numeric(data[col])
+            except:
+                errors.append(f"Column '{col}' must contain numeric values")
+    
+    # Check boolean columns
+    boolean_columns = ['is_holiday', 'platform_available', 'crew_available', 'is_peak_hour']
+    for col in boolean_columns:
+        if col in data.columns:
+            unique_values = data[col].unique()
+            valid_bool_values = [True, False, 'True', 'False', 'true', 'false', 1, 0, '1', '0']
+            invalid_bool = [val for val in unique_values if val not in valid_bool_values]
+            if len(invalid_bool) > 0:
+                errors.append(f"Column '{col}' contains invalid boolean values: {invalid_bool}. Use True/False")
+    
+    # Check if data is not empty
+    if len(data) == 0:
+        errors.append("Dataset is empty")
+    
+    return {
+        'valid': len(errors) == 0,
+        'errors': errors
+    }
+
+def display_data_preview(data):
+    """
+    Display a preview of the loaded/generated data with statistics and visualizations.
+    
+    Args:
+        data (pd.DataFrame): Data to display
+    """
+    st.subheader("📋 Dataset Preview")
+    
+    # Dataset overview metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Records", len(data))
+    with col2:
+        st.metric("Average Delay", f"{data['actual_delay'].mean():.1f} min")
+    with col3:
+        st.metric("Delay Rate", f"{(data['actual_delay'] > 0).mean()*100:.1f}%")
+    with col4:
+        st.metric("Cancellation Rate", f"{(data['recommended_action'] == 'Cancel').mean()*100:.1f}%")
+    
+    # Data preview table
+    st.dataframe(data.head(10), width='stretch')
+    
+    # Visualizations
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Delay distribution
+        fig = px.histogram(data, x='actual_delay', nbins=30, 
+                         title="Distribution of Train Delays")
+        fig.update_layout(xaxis_title="Delay (minutes)", yaxis_title="Frequency")
+        st.plotly_chart(fig, width='stretch')
+    
+    with col2:
+        # Action distribution
+        action_counts = data['recommended_action'].value_counts()
+        fig = px.pie(values=action_counts.values, names=action_counts.index,
+                    title="Recommended Actions Distribution")
+        st.plotly_chart(fig, width='stretch')
+
 def main():
     st.set_page_config(
         page_title="AI Train Rescheduling System",
@@ -28,7 +139,7 @@ def main():
     st.sidebar.title("Navigation")
     page = st.sidebar.selectbox(
         "Choose a section:",
-        ["Control Center", "Data Generation", "Model Training", "Schedule Optimization", "What-If Simulation", "Evaluation & Results", "Performance Dashboard"]
+        ["Control Center", "Custom Data Input", "Model Training", "Schedule Optimization", "What-If Simulation", "Evaluation & Results", "Performance Dashboard"]
     )
     
     # Initialize session state
@@ -45,8 +156,8 @@ def main():
     
     if page == "Control Center":
         control_center_page()
-    elif page == "Data Generation":
-        data_generation_page()
+    elif page == "Custom Data Input":
+        custom_data_input_page()
     elif page == "Model Training":
         model_training_page()
     elif page == "Schedule Optimization":
@@ -58,89 +169,140 @@ def main():
     elif page == "Performance Dashboard":
         performance_dashboard_page()
 
-def data_generation_page():
-    st.header("📊 Data Generation")
-    st.markdown("Generate synthetic train operations dataset for model training and testing.")
+def custom_data_input_page():
+    st.header("📁 Custom Data Input")
+    st.markdown("Upload your own train operations dataset or generate synthetic data for testing.")
     
-    col1, col2 = st.columns([1, 1])
+    # Create tabs for different input methods
+    tab1, tab2 = st.tabs(["📤 Upload Custom Data", "🎲 Generate Sample Data"])
     
-    with col1:
-        st.subheader("Dataset Parameters")
-        n_samples = st.slider("Number of train operations", 1000, 10000, 5000, 500)
-        n_trains = st.slider("Number of trains", 50, 500, 200, 25)
-        n_stations = st.slider("Number of stations", 10, 100, 50, 5)
+    with tab1:
+        st.subheader("Upload Your Train Operations Data")
+        st.markdown("Upload a CSV file with your train operations data. The file should contain the following columns:")
         
-        # Advanced parameters in expander
-        with st.expander("Advanced Parameters"):
-            delay_prob = st.slider("Delay probability", 0.1, 0.5, 0.25, 0.05)
-            weather_severity_prob = st.slider("Severe weather probability", 0.05, 0.3, 0.15, 0.05)
-            holiday_prob = st.slider("Holiday probability", 0.05, 0.2, 0.1, 0.01)
-    
-    with col2:
-        st.subheader("Generate Dataset")
+        # Show required columns
+        with st.expander("📋 Required Data Format", expanded=True):
+            st.markdown("""
+            **Input Features (Required):**
+            - `train_id`: Unique identifier for each train
+            - `train_type`: Type of train (Express/Local)
+            - `day_of_week`: Day of the week (Monday, Tuesday, etc.)
+            - `is_holiday`: Boolean (True/False) for holiday indicator
+            - `upstream_delay`: Previous delay in minutes (numeric)
+            - `passenger_load_percentage`: Passenger capacity percentage (0-100)
+            - `weather_severity`: Weather condition (Clear/Light/Moderate/Severe)
+            - `platform_available`: Boolean (True/False) for platform availability
+            - `crew_available`: Boolean (True/False) for crew availability
+            - `scheduled_headway`: Time gap between trains in minutes
+            - `origin_station`: Starting station identifier
+            - `destination_station`: Ending station identifier
+            - `hour`: Hour of day (0-23)
+            - `is_peak_hour`: Boolean (True/False) for peak hours
+            
+            **Target Variables (Required for training):**
+            - `actual_delay`: Actual delay in minutes (numeric)
+            - `recommended_action`: Recommended action (NoChange/Delay/ShortTurn/Cancel)
+            """)
         
-        if st.button("🎲 Generate Synthetic Data", type="primary"):
-            with st.spinner("Generating synthetic train operations data..."):
-                # Initialize data generator
-                generator = TrainDataGenerator(
-                    n_trains=n_trains,
-                    n_stations=n_stations,
-                    delay_probability=delay_prob,
-                    weather_severity_probability=weather_severity_prob,
-                    holiday_probability=holiday_prob
+        # Download template button
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            if st.button("📥 Download Data Template", type="secondary"):
+                # Generate a small sample dataset as template
+                generator = TrainDataGenerator()
+                template_data = generator.generate_dataset(50)
+                csv_data = template_data.to_csv(index=False)
+                st.download_button(
+                    label="💾 Download CSV Template",
+                    data=csv_data,
+                    file_name="train_data_template.csv",
+                    mime="text/csv"
                 )
+        
+        # File upload
+        uploaded_file = st.file_uploader(
+            "Choose a CSV file",
+            type="csv",
+            help="Upload your train operations data in CSV format"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                # Read the uploaded file
+                data = pd.read_csv(uploaded_file)
                 
-                # Generate data
-                data = generator.generate_dataset(n_samples)
+                # Validate the data
+                validation_result = validate_uploaded_data(data)
                 
-                # Save to session state
-                st.session_state.train_data = data
-                st.session_state.data_generated = True
-                
-                st.success(f"✅ Generated {len(data)} train operation records!")
+                if validation_result["valid"]:
+                    # Save to session state
+                    st.session_state.train_data = data
+                    st.session_state.data_generated = True
+                    
+                    st.success(f"✅ Successfully loaded {len(data)} train operation records!")
+                    
+                    # Display data preview
+                    display_data_preview(data)
+                    
+                else:
+                    st.error("❌ Data validation failed:")
+                    for error in validation_result["errors"]:
+                        st.error(f"• {error}")
+                    
+            except Exception as e:
+                st.error(f"❌ Error reading file: {str(e)}")
     
-    # Display generated data if available
-    if st.session_state.data_generated:
-        st.subheader("📋 Generated Dataset Preview")
-        data = st.session_state.train_data
+    with tab2:
+        st.subheader("Generate Synthetic Data for Testing")
+        st.markdown("If you don't have your own data, generate synthetic train operations data for testing the system.")
         
-        # Dataset overview
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Records", len(data))
-        with col2:
-            st.metric("Average Delay", f"{data['actual_delay'].mean():.1f} min")
-        with col3:
-            st.metric("Delay Rate", f"{(data['actual_delay'] > 0).mean()*100:.1f}%")
-        with col4:
-            st.metric("Cancellation Rate", f"{(data['recommended_action'] == 'Cancel').mean()*100:.1f}%")
-        
-        # Data preview
-        st.dataframe(data.head(10), use_container_width=True)
-        
-        # Visualizations
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([1, 1])
         
         with col1:
-            # Delay distribution
-            fig = px.histogram(data, x='actual_delay', nbins=30, 
-                             title="Distribution of Train Delays")
-            fig.update_layout(xaxis_title="Delay (minutes)", yaxis_title="Frequency")
-            st.plotly_chart(fig, use_container_width=True)
+            st.subheader("Dataset Parameters")
+            n_samples = st.slider("Number of train operations", 1000, 10000, 5000, 500)
+            n_trains = st.slider("Number of trains", 50, 500, 200, 25)
+            n_stations = st.slider("Number of stations", 10, 100, 50, 5)
+            
+            # Advanced parameters in expander
+            with st.expander("Advanced Parameters"):
+                delay_prob = st.slider("Delay probability", 0.1, 0.5, 0.25, 0.05)
+                weather_severity_prob = st.slider("Severe weather probability", 0.05, 0.3, 0.15, 0.05)
+                holiday_prob = st.slider("Holiday probability", 0.05, 0.2, 0.1, 0.01)
         
         with col2:
-            # Action distribution
-            action_counts = data['recommended_action'].value_counts()
-            fig = px.pie(values=action_counts.values, names=action_counts.index,
-                        title="Recommended Actions Distribution")
-            st.plotly_chart(fig, use_container_width=True)
+            st.subheader("Generate Dataset")
+            
+            if st.button("🎲 Generate Synthetic Data", type="primary"):
+                with st.spinner("Generating synthetic train operations data..."):
+                    # Initialize data generator
+                    generator = TrainDataGenerator(
+                        n_trains=n_trains,
+                        n_stations=n_stations,
+                        delay_probability=delay_prob,
+                        weather_severity_probability=weather_severity_prob,
+                        holiday_probability=holiday_prob
+                    )
+                    
+                    # Generate data
+                    data = generator.generate_dataset(n_samples)
+                    
+                    # Save to session state
+                    st.session_state.train_data = data
+                    st.session_state.data_generated = True
+                    
+                    st.success(f"✅ Generated {len(data)} train operation records!")
+        
+        # Display generated data if available
+        if st.session_state.data_generated:
+            display_data_preview(st.session_state.train_data)
 
 def model_training_page():
     st.header("🤖 Model Training")
     st.markdown("Train machine learning models for delay prediction and action classification.")
     
     if not st.session_state.data_generated:
-        st.warning("⚠️ Please generate data first in the Data Generation section.")
+        st.warning("⚠️ Please input your data first in the Custom Data Input section.")
         return
     
     data = st.session_state.train_data
@@ -237,7 +399,7 @@ def model_training_page():
                 xaxis_title="Actual Delay (minutes)",
                 yaxis_title="Predicted Delay (minutes)"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             
             # Metrics table
             metrics_df = pd.DataFrame({
@@ -268,7 +430,7 @@ def model_training_page():
                 xaxis_title="Predicted Action",
                 yaxis_title="Actual Action"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             
             # Classification report
             st.text("Classification Report:")
@@ -407,7 +569,7 @@ def optimization_page():
             fig.update_xaxes(title_text="Delay (minutes)")
             fig.update_yaxes(title_text="Frequency")
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             # Action distribution comparison
@@ -446,7 +608,7 @@ def optimization_page():
                 barmode='group'
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
 def evaluation_page():
     st.header("📊 Evaluation & Results")
@@ -573,7 +735,7 @@ def evaluation_page():
             hovermode='x unified'
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with tab2:
         st.subheader("Model Analysis")
@@ -592,7 +754,7 @@ def evaluation_page():
                 title="Feature Importance for Delay Prediction"
             )
             fig.update_layout(xaxis_title="Importance", yaxis_title="Features")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             st.write("**Action Classification Feature Importance**")
@@ -605,14 +767,14 @@ def evaluation_page():
                 title="Feature Importance for Action Classification"
             )
             fig.update_layout(xaxis_title="Importance", yaxis_title="Features")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # Model comparison
         st.subheader("Model Comparison")
         
         comparison_data = eval_results['model_comparison']
         comparison_df = pd.DataFrame(comparison_data)
-        st.dataframe(comparison_df, use_container_width=True)
+        st.dataframe(comparison_df, width='stretch')
     
     with tab3:
         st.subheader("Optimization Impact Analysis")
@@ -655,7 +817,7 @@ def evaluation_page():
             ]
         })
         
-        st.dataframe(comparison_metrics, use_container_width=True)
+        st.dataframe(comparison_metrics, width='stretch')
         
         # ROI Analysis
         st.subheader("Return on Investment Analysis")
@@ -785,7 +947,7 @@ def control_center_page():
             # Color code conflicts
             st.dataframe(
                 display_data,
-                use_container_width=True
+                width='stretch'
             )
     
     with col2:
@@ -1068,7 +1230,7 @@ def whatif_simulation_page():
             ]
         })
         
-        st.dataframe(comparison_df, use_container_width=True)
+        st.dataframe(comparison_df, width='stretch')
         
         # Recommendations
         st.subheader("💡 Simulation Insights")
@@ -1166,7 +1328,7 @@ def performance_dashboard_page():
             yaxis_title="Punctuality (%)",
             hovermode='x unified'
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # Multi-metric dashboard
         col1, col2 = st.columns(2)
@@ -1185,7 +1347,7 @@ def performance_dashboard_page():
                 xaxis_title="Date",
                 yaxis_title="Trains/Hour"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             fig = go.Figure()
@@ -1201,7 +1363,7 @@ def performance_dashboard_page():
                 xaxis_title="Date",
                 yaxis_title="Minutes"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
     
     with tab2:
         st.subheader("📋 Audit Trail")
@@ -1225,7 +1387,7 @@ def performance_dashboard_page():
         if user_filter != "All":
             filtered_data = filtered_data[filtered_data['User'] == user_filter]
         
-        st.dataframe(filtered_data, use_container_width=True)
+        st.dataframe(filtered_data, width='stretch')
         
         # Audit statistics
         col1, col2, col3 = st.columns(3)
@@ -1281,7 +1443,7 @@ def performance_dashboard_page():
                 xaxis_title="Hour",
                 yaxis_title="Response Time (ms)"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
     
     with tab4:
         st.subheader("📄 Performance Reports")
