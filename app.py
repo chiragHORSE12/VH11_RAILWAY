@@ -85,12 +85,13 @@ def validate_uploaded_data(data):
         'errors': errors
     }
 
-def display_data_preview(data):
+def display_data_preview(data, context="main"):
     """
     Display a preview of the loaded/generated data with statistics and visualizations.
     
     Args:
         data (pd.DataFrame): Data to display
+        context (str): Context identifier to ensure unique keys
     """
     st.subheader("📋 Dataset Preview")
     
@@ -116,14 +117,14 @@ def display_data_preview(data):
         fig = px.histogram(data, x='actual_delay', nbins=30, 
                          title="Distribution of Train Delays")
         fig.update_layout(xaxis_title="Delay (minutes)", yaxis_title="Frequency")
-        st.plotly_chart(fig, width='stretch', key="delay_histogram")
+        st.plotly_chart(fig, width='stretch', key=f"delay_histogram_{context}")
     
     with col2:
         # Action distribution
         action_counts = data['recommended_action'].value_counts()
         fig = px.pie(values=action_counts.values, names=action_counts.index,
                     title="Recommended Actions Distribution")
-        st.plotly_chart(fig, width='stretch', key="action_pie_chart")
+        st.plotly_chart(fig, width='stretch', key=f"action_pie_chart_{context}")
 
 def main():
     st.set_page_config(
@@ -242,7 +243,7 @@ def custom_data_input_page():
                     st.success(f"✅ Successfully loaded {len(data)} train operation records!")
                     
                     # Display data preview
-                    display_data_preview(data)
+                    display_data_preview(data, "upload")
                     
                 else:
                     st.error("❌ Data validation failed:")
@@ -295,7 +296,7 @@ def custom_data_input_page():
         
         # Display generated data if available
         if st.session_state.data_generated:
-            display_data_preview(st.session_state.train_data)
+            display_data_preview(st.session_state.train_data, "synthetic")
 
 def model_training_page():
     st.header("🤖 Model Training")
@@ -922,7 +923,7 @@ def control_center_page():
             st.session_state.realtime_data = current_data
         
         # Display current trains
-        if 'realtime_data' in st.session_state:
+        if 'realtime_data' in st.session_state and st.session_state.realtime_data is not None:
             data = st.session_state.realtime_data
             
             # Status metrics
@@ -1378,7 +1379,8 @@ def performance_dashboard_page():
         with col2:
             user_filter = st.selectbox("Filter by User", ["All"] + audit_data['User'].unique().tolist())
         with col3:
-            date_filter = st.date_input("From Date", value=pd.Timestamp.now().date() - pd.Timedelta(days=7))
+            from datetime import date, timedelta
+            date_filter = st.date_input("From Date", value=date.today() - timedelta(days=7))
         
         # Apply filters
         filtered_data = audit_data.copy()
@@ -1392,7 +1394,9 @@ def performance_dashboard_page():
         # Audit statistics
         col1, col2, col3 = st.columns(3)
         with col1:
-            filtered_today = filtered_data[pd.to_datetime(filtered_data['Timestamp']).dt.date == pd.Timestamp.now().date()]
+            from datetime import date
+            today = date.today()
+            filtered_today = filtered_data[pd.to_datetime(filtered_data['Timestamp']).dt.date == today]
             st.metric("Total Actions Today", len(filtered_today))
         with col2:
             st.metric("Manual Overrides", len(filtered_data[filtered_data['Action'] == 'Manual Override']))
